@@ -1,0 +1,174 @@
+🔥 TINDER AI REACT - FILES OVERVIEW
+═══════════════════════════════════════════════════════════════
+
+📚 DOCUMENTATION (Read First)
+─────────────────────────────
+1. SUMMARY.md              → Start here! Overview + links
+2. QUICKSTART.md           → 5-minute setup guide
+3. README.md               → Full documentation
+4. ARCHITECTURE.md         → System design details
+5. MIGRATION_NOTES.md      → Vanilla JS → React comparison
+6. PROJECT_STATUS.md       → Current status + TODO
+7. DEPLOYMENT.md           → Production deployment guide
+
+🎯 QUICK START IN 3 STEPS
+─────────────────────────────
+Step 1: npm install
+Step 2: Start backend (port 3001)
+Step 3: npm start
+
+📦 SOURCE CODE
+─────────────────────────────
+/src
+├── App.js                 → Root component (main entry)
+├── App.css                → Root styles
+├── index.js               → React DOM render
+├── index.css              → Global styles
+│
+├── /components            → UI Components
+│   ├── /SwipeCard         → Swipe interface
+│   │   ├── SwipeCard.js   → Component logic
+│   │   ├── SwipeCard.css  → Styles
+│   │   └── SwipeCard.test.js → Tests
+│   │
+│   ├── /AdminPanel        → Admin dashboard
+│   │   ├── AdminPanel.js  → Admin UI + tabs
+│   │   └── AdminPanel.css → Admin styles
+│   │
+│   └── /Modals            → Modal windows
+│       ├── CommentModal.js   → Rating comments
+│       ├── LoginModal.js     → Authentication
+│       ├── GenerateModal.js  → AI generation
+│       └── Modal.css         → Shared modal styles
+│
+├── /services              → Backend integration
+│   └── api.js             → API client (Singleton)
+│
+└── /hooks                 → Custom React hooks
+    ├── useAppState.js     → Global state management
+    └── useSwipe.js        → Swipe gesture logic
+
+⚙️  CONFIGURATION
+─────────────────────────────
+package.json               → Dependencies + scripts + proxy
+.env.example               → Environment variables template
+.gitignore                 → Git ignore rules
+
+🛠️  SCRIPTS
+─────────────────────────────
+dev.sh                     → Development helper script
+
+🗂️  COMPONENT HIERARCHY
+─────────────────────────────
+App
+├── Header
+│   └── AdminButton
+├── SwipeView (when view='swipe')
+│   ├── LoadingOverlay
+│   ├── ErrorBanner
+│   └── SwipeCard
+│       ├── CardContent (image/video/audio/text)
+│       ├── CardInfo
+│       ├── SwipeInstructions
+│       ├── SkipButton
+│       └── CommentModal (conditional)
+├── AdminPanel (when view='admin')
+│   ├── AdminHeader
+│   ├── Tabs (Content/Ratings/Stats)
+│   └── GenerateModal (conditional)
+├── LoginModal (conditional)
+└── Footer
+
+🔗 DATA FLOW
+─────────────────────────────
+User Action
+    ↓
+React Component
+    ↓
+Custom Hook / API Service
+    ↓
+HTTP Request → Express Backend (port 3001)
+    ↓
+SQLite Database
+    ↓
+Response → Update React State
+    ↓
+Re-render UI
+
+🎨 KEY FEATURES
+─────────────────────────────
+✅ Swipe механіка (↑+2, →+1, ↓-1, ←-2)
+✅ Touch + Mouse support
+✅ Admin panel з CRUD
+✅ JWT авторизація
+✅ AI генерація через Replicate
+✅ Коментарі до оцінок
+✅ Статистика
+✅ Responsive design
+
+📊 FILE SIZES (Approximate)
+─────────────────────────────
+Component Files:     ~20 KB
+Service/Hooks:       ~5 KB
+CSS:                 ~15 KB
+Documentation:       ~30 KB
+Total Source:        ~40 KB
+React Runtime:       ~140 KB (gzipped)
+Build Output:        ~220 KB (gzipped)
+
+🚀 NPM SCRIPTS
+─────────────────────────────
+npm start              → Development server (port 3000)
+npm run build          → Production build
+npm test               → Run tests
+npm run eject          → Eject from CRA (⚠️ one-way)
+
+🔧 PORTS
+─────────────────────────────
+3000 → React frontend
+3001 → Express backend (required)
+
+📝 FILE COUNT
+─────────────────────────────
+Components:          7 files
+Services/Hooks:      3 files
+Documentation:       7 files
+Configuration:       3 files
+Tests:               1 file
+Total:               21 files
+
+🎯 WHAT TO READ BASED ON YOUR ROLE
+─────────────────────────────────────
+👨‍💻 Developer (First time):
+   1. SUMMARY.md
+   2. QUICKSTART.md
+   3. ARCHITECTURE.md
+
+🏗️ Architect / Tech Lead:
+   1. ARCHITECTURE.md
+   2. MIGRATION_NOTES.md
+   3. PROJECT_STATUS.md
+
+🚀 DevOps / Deployment:
+   1. DEPLOYMENT.md
+   2. package.json
+   3. .env.example
+
+📚 Documentation Writer:
+   1. README.md
+   2. All .md files
+
+🧪 QA / Tester:
+   1. PROJECT_STATUS.md
+   2. SwipeCard.test.js
+   3. QUICKSTART.md
+
+👤 Product Manager:
+   1. SUMMARY.md
+   2. README.md
+   3. PROJECT_STATUS.md
+
+═══════════════════════════════════════════════════════════════
+📍 YOU ARE HERE: React version complete, ready for testing
+🎯 NEXT STEP: Read QUICKSTART.md and run npm install
+═══════════════════════════════════════════════════════════════
