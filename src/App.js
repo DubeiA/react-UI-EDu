@@ -15,14 +15,12 @@ function StatsBar() {
     api.getSummary().then(s => { if (mounted) setSummary(s); }).catch(() => {});
     return () => { mounted = false; };
   }, []);
-  // simple refresh on visibility change and every 10s
   useEffect(() => {
     const int = setInterval(() => { api.getSummary().then(setSummary).catch(() => {}); }, 10000);
     const onVis = () => { if (!document.hidden) { api.getSummary().then(setSummary).catch(() => {}); } };
     document.addEventListener('visibilitychange', onVis);
     return () => { clearInterval(int); document.removeEventListener('visibilitychange', onVis); };
   }, []);
-  // immediate refresh on app events
   useEffect(() => {
     const onRefresh = () => { api.getSummary().then(setSummary).catch(() => {}); };
     window.addEventListener('summary-refresh', onRefresh);
@@ -57,17 +55,12 @@ function App() {
   const [showGptConsole, setShowGptConsole] = useState(false);
   const pollingRef = useRef(null);
   const [isPolling, setIsPolling] = useState(false);
-  let pollAttempts = 0;
-  const maxPollAttempts = 5;
 
-  // Load next content on mount
   useEffect(() => {
     if (view === 'swipe') {
       loadNextContent();
     }
   }, [view]);
-
-  // No client-side replicate token persistence
 
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
@@ -106,7 +99,6 @@ function App() {
       setCurrentContent(content);
     } catch (err) {
       if (err && (err.status === 404)) {
-        // Немає контенту — це не помилка, просто порожньо
         setCurrentContent(null);
         startPollingForContent();
       } else {
@@ -123,9 +115,7 @@ function App() {
 
     try {
       await api.submitRating(currentContent.id, rating, comment);
-      // Load next content after rating
       loadNextContent();
-      // Optionally: fetch summary stats and show somewhere
       try { window.dispatchEvent(new Event('summary-refresh')); } catch {}
     } catch (err) {
       setError('Не вдалося зберегти оцінку');
@@ -155,13 +145,13 @@ function App() {
       setShowLoginModal(true);
     }
   };
+
   const handleGenerate = async (formData) => {
-    // Новий формат: бекенд очікує type + model (ключ з /api/models)
     try {
       const res = await api.generateContent(
         formData.prompt,
         formData.model,
-        { type: formData.type, count: 1 }
+        { type: formData.type, count: formData.count || 1 }
       );
       const jobId = res?.jobId;
       if (jobId) {
@@ -169,19 +159,29 @@ function App() {
         const poll = async () => {
           try {
             const st = await api.getGenerationStatus(jobId);
-            if (st.status === 'completed' || st.status === 'failed' || st.status === 'notfound') {
+            // ← ВИПРАВЛЕНО: Додано обробку помилок
+            if (st.status === 'completed') {
               try { window.dispatchEvent(new Event('summary-refresh')); } catch {}
               if (!currentContent) {
                 loadNextContent();
               }
               return;
             }
-          } catch {}
+            if (st.status === 'failed') {
+              setError(`Помилка генерації: ${st.result?.error || 'невідома помилка'}`);
+              return;
+            }
+            if (st.status === 'notfound') {
+              setError('Генерація не знайдена');
+              return;
+            }
+          } catch (pollErr) {
+            console.error('Polling error:', pollErr);
+          }
           if (Date.now() - startedAt < 120000) setTimeout(poll, 1500);
         };
         poll();
       } else {
-        // Якщо бекенд відразу створює контент без черги
         try { window.dispatchEvent(new Event('summary-refresh')); } catch {}
         if (!currentContent) loadNextContent();
       }
@@ -203,34 +203,8 @@ function App() {
     }
   };
 
-  const pollContent = async () => {
-    try {
-      const response = await api.getNextContent();
-      if (response) {
-        // Показувати контент, не змінюючи режим перегляду
-        setCurrentContent(response);
-        pollAttempts = 0; // Reset poll attempts on success
-      }
-    } catch (error) {
-      if (error.response?.status === 404) {
-        pollAttempts++;
-        if (pollAttempts >= maxPollAttempts) {
-          console.log('Stopping polling due to repeated 404s.');
-          return; // Stop polling after max attempts
-        }
-      }
-      console.error('Polling error:', error);
-    }
-  };
-
-  useEffect(() => {
-    const intervalId = setInterval(pollContent, 5000); // Poll every 5 seconds
-    return () => clearInterval(intervalId);
-  }, []);
-
   return (
     <div className="App">
-      {/* Header */}
       <header className="app-header">
         <h1>🔥 Tinder AI</h1>
         <div className="header-actions">
@@ -242,7 +216,6 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="app-main">
         {view === 'swipe' && (
           <div className="swipe-view">
@@ -280,7 +253,6 @@ function App() {
         )}
       </main>
 
-      {/* Login Modal */}
       {showLoginModal && (
         <LoginModal
           onLogin={handleLogin}
@@ -299,7 +271,6 @@ function App() {
         <GptConsole onClose={() => setShowGptConsole(false)} />
       )}
 
-      {/* Footer */}
       <footer className="app-footer">
         <p>Swipe для оцінки: ↑ +2 | → +1 | ↓ -1 | ← -2</p>
       </footer>

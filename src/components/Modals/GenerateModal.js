@@ -5,7 +5,8 @@ const GenerateModal = ({ onGenerate, onClose }) => {
   const [formData, setFormData] = useState({
     prompt: '',
     type: 'image',
-    model: ''
+    model: '',
+    count: 1  // ← ВИПРАВЛЕНО: додано count
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +19,6 @@ const GenerateModal = ({ onGenerate, onClose }) => {
         const models = await resp.json();
         setAvailableModels(models || { image: [], video: [], audio: [] });
         if (models?.image?.length) {
-          // Значенням буде replicateId, щоб напряму відправляти у бекенд
           setFormData(prev => ({ ...prev, model: models.image[0].replicateId }));
         }
       } catch (e) {

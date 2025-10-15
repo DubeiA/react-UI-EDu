@@ -42,41 +42,47 @@ const MODELS_CONFIG = {
       name: 'Stable Diffusion XL',
       price: '$0.008',
       speed: 'Середньо (~1 хв)',
-      replicateId: 'stability-ai/sdxl',
+      replicateId: 'stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b',
     },
   },
   video: {
-    'zeroscope': {
-      name: 'Zeroscope V2 XL',
-      price: '$0.10',
-      speed: '~3-5 хв',
-      replicateId: 'anotherjesse/zeroscope-v2-xl',
+    'ltx-video': {
+      name: 'LTX Video (рекомендовано)',
+      price: '$0.05',
+      speed: '~1-2 хв',
+      replicateId: 'lightricks/ltx-video:8c47da666861d081eeb4d1261853087de23923a268a69b63febdf5dc1dee08e4',
     },
-    'animatediff': {
-      name: 'AnimateDiff',
+    'cogvideox': {
+      name: 'CogVideoX-5B',
+      price: '$0.03',
+      speed: '~2-3 хв',
+      replicateId: 'fofr/cogvideox-5b:4b245eb6225de6a2fd444ff752ee93dcfb49088c53249d61b4ca3f1e9e8b5b99',
+    },
+    'svd': {
+      name: 'Stable Video Diffusion',
       price: '$0.08',
-      speed: '~2-4 хв',
-      replicateId: 'lucataco/animate-diff',
+      speed: '~3-4 хв',
+      replicateId: 'stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438',
     },
   },
   audio: {
+    'lyria-2': {
+      name: 'Google Lyria 2 (рекомендовано)',
+      price: '$0.03',
+      speed: '~30-60 сек',
+      replicateId: 'google/lyria-2',
+    },
     'musicgen': {
-      name: 'MusicGen',
+      name: 'MusicGen (Meta)',
       price: '$0.05',
       speed: '~1-2 хв',
-      replicateId: 'meta/musicgen',
+      replicateId: 'meta/musicgen:671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb',
     },
     'riffusion': {
       name: 'Riffusion',
       price: '$0.03',
       speed: '~30-60 сек',
-      replicateId: 'riffusion/riffusion',
-    },
-    'audiogen': {
-      name: 'AudioGen',
-      price: '$0.04',
-      speed: '~1 хв',
-      replicateId: 'meta/audiogen',
+      replicateId: 'riffusion/riffusion:8cf61ea6c56afd61d8f5b9ffd14d7c216c0a93844ce2d82ac1c9ecc9c7f24e05',
     },
   },
 };
