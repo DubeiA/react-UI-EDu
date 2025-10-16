@@ -44,7 +44,7 @@ const AdminPanel = ({ onClose }) => {
     try {
       await api.generateContent(formData.prompt, formData.model, {
         type: formData.type,
-        count: 1,
+        count: Number(formData.count) || 1,
       });
       alert('Контент успішно згенеровано!');
       setPage(1);

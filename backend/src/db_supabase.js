@@ -7,7 +7,7 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || null;
 if (!SUPABASE_URL || !(SUPABASE_ANON_KEY || SUPABASE_SERVICE_KEY)) throw new Error('SUPABASE_URL and one of SUPABASE_ANON_KEY or SUPABASE_SERVICE_KEY are required');
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY);
-export const db = null; // compatibility placeholder
+export const db = { supabase }; // ✅ Експортуємо supabase через db для queue.js
 
 export async function initDb() {
   // Create tables via SQL RPC if not exists (simple bootstrap)
@@ -37,16 +37,114 @@ export async function touchSession(sessionId) {
   await supabase.from('sessions').upsert({ session_id: sessionId, last_seen_at: now }, { onConflict: 'session_id' });
 }
 
-export async function recordBatch({ id, prompt, model, count }) {
-  await supabase.from('batches').upsert({ id, prompt, model, count });
+// ✅ ВИПРАВЛЕНА функція recordBatch
+export async function recordBatch({ 
+  id, 
+  prompt, 
+  model, 
+  count, 
+  type = null,                    // ✅ ДОДАНО
+  params = {},                    // ✅ ДОДАНО
+  created_by_user_id = null,      // ✅ ДОДАНО
+  agent_id = null,                // ✅ ДОДАНО
+  status = 'processing'           // ✅ ДОДАНО
+}) {
+  try {
+    const { data, error } = await supabase
+      .from('batches')
+      .upsert({
+        id,
+        prompt,
+        model,
+        type,                     // ✅ ДОДАНО
+        params,                   // ✅ ДОДАНО
+        count,
+        created_by_user_id,       // ✅ ДОДАНО
+        agent_id,                 // ✅ ДОДАНО
+        status,                   // ✅ ДОДАНО
+        created_at: new Date().toISOString()
+      }, { 
+        onConflict: 'id' 
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ recordBatch error:', error);
+      throw error;
+    }
+
+    console.log('✅ Recorded batch:', data.id, '| type:', data.type, '| status:', data.status);
+    return data;
+  } catch (err) {
+    console.error('❌ recordBatch exception:', err);
+    throw err;
+  }
 }
 
-export async function createContent({ type, title, description, text_body = null, metadata = {}, assets = [] }) {
-  const { data, error } = await supabase.from('content').insert({ type, title, description, text_body, metadata }).select('*').single();
-  if (error) throw error;
+// ✅ ВИПРАВЛЕНА функція createContent
+export async function createContent({ 
+  type, 
+  title, 
+  description, 
+  text_body = null, 
+  metadata = {}, 
+  assets = [], 
+  prompt = null, 
+  model = null,
+  batch_id = null,              // ✅ ДОДАНО
+  generation_params = {},       // ✅ ДОДАНО
+  original_prompt = null,       // ✅ ДОДАНО
+  enhanced_prompt = null,       // ✅ ДОДАНО
+  agent_id = null               // ✅ ДОДАНО
+}) {
+  // Try to persist prompt/model if columns exist; fall back to metadata-only if not
+  const base = { 
+    type, 
+    title, 
+    description, 
+    text_body, 
+    metadata 
+  };
+  
+  if (prompt !== null && prompt !== undefined) base.prompt = prompt;
+  if (model !== null && model !== undefined) base.model = model;
+  if (batch_id !== null && batch_id !== undefined) base.batch_id = batch_id;              // ✅ ДОДАНО
+  if (generation_params !== null && generation_params !== undefined) {
+    base.generation_params = generation_params;                                           // ✅ ДОДАНО
+  }
+  if (original_prompt !== null && original_prompt !== undefined) base.original_prompt = original_prompt;
+  if (enhanced_prompt !== null && enhanced_prompt !== undefined) base.enhanced_prompt = enhanced_prompt;
+  if (agent_id !== null && agent_id !== undefined) base.agent_id = agent_id;
+
+  let insertRes = await supabase.from('content').insert(base).select('*').single();
+  if (insertRes.error) {
+    // If schema lacks prompt/model columns, retry without them
+    const errCode = insertRes.error?.code || insertRes.error?.hint || '';
+    const errMsg = String(insertRes.error?.message || '').toLowerCase();
+    const schemaMissing = errMsg.includes('column') && (errMsg.includes('prompt') || errMsg.includes('model') || errMsg.includes('batch_id') || errMsg.includes('generation_params') || errMsg.includes('original_prompt') || errMsg.includes('enhanced_prompt') || errMsg.includes('agent_id'));
+    if (schemaMissing) {
+      const fallback = { type, title, description, text_body, metadata };
+      insertRes = await supabase.from('content').insert(fallback).select('*').single();
+    }
+  }
+  const { data, error } = insertRes;
+  if (error) throw error; 
   const contentId = data.id;
+  
+  // ✅ ВИПРАВЛЕНО: додаємо size_bytes, poster_url, ord
   for (const a of assets) {
-    await supabase.from('assets').insert({ content_id: contentId, url: a.url, mime: a.mime || null, width: a.width || null, height: a.height || null, duration: a.duration || null });
+    await supabase.from('assets').insert({ 
+      content_id: contentId, 
+      url: a.url, 
+      mime: a.mime || null, 
+      width: a.width || null, 
+      height: a.height || null, 
+      duration: a.duration || null,
+      size_bytes: a.size_bytes || null,    // ✅ ДОДАНО
+      poster_url: a.poster_url || null,    // ✅ ДОДАНО
+      ord: a.ord || 0                      // ✅ ДОДАНО
+    });
   }
   return getContentById(contentId);
 }
@@ -78,17 +176,55 @@ export async function deleteContent(id) {
 }
 
 export async function updateContent(id, data) {
-  const { data: updated, error } = await supabase.from('content').update({
+  // Prepare update payload with optional prompt/model if provided
+  const payload = {
     type: data.type,
     title: data.title,
     description: data.description,
     metadata: data.metadata,
-  }).eq('id', id).select('*').single();
-  if (error) throw error;
+  };
+  if (Object.prototype.hasOwnProperty.call(data, 'prompt')) payload.prompt = data.prompt;
+  if (Object.prototype.hasOwnProperty.call(data, 'model')) payload.model = data.model;
+  if (Object.prototype.hasOwnProperty.call(data, 'batch_id')) payload.batch_id = data.batch_id;              // ✅ ДОДАНО
+  if (Object.prototype.hasOwnProperty.call(data, 'generation_params')) payload.generation_params = data.generation_params;  // ✅ ДОДАНО
+  if (Object.prototype.hasOwnProperty.call(data, 'original_prompt')) payload.original_prompt = data.original_prompt; // ✅ ДОДАНО
+  if (Object.prototype.hasOwnProperty.call(data, 'enhanced_prompt')) payload.enhanced_prompt = data.enhanced_prompt; // ✅ ДОДАНО
+  if (Object.prototype.hasOwnProperty.call(data, 'agent_id')) payload.agent_id = data.agent_id; // ✅ ДОДАНО
+
+  let updateRes = await supabase.from('content').update(payload).eq('id', id).select('*').single();
+  if (updateRes.error) {
+    const msg = String(updateRes.error?.message || '').toLowerCase();
+    const schemaMissing = msg.includes('column') && (
+      msg.includes('prompt') || msg.includes('model') || msg.includes('batch_id') || msg.includes('generation_params') ||
+      msg.includes('original_prompt') || msg.includes('enhanced_prompt') || msg.includes('agent_id')
+    );
+    if (schemaMissing) {
+      // Retry without prompt/model/batch_id/generation_params keys
+      const fallback = {
+        type: data.type,
+        title: data.title,
+        description: data.description,
+        metadata: data.metadata,
+      };
+      updateRes = await supabase.from('content').update(fallback).eq('id', id).select('*').single();
+    }
+  }
+  const { data: updated, error } = updateRes;
+  if (error) throw error; 
   if (Array.isArray(data.assets)) {
     await supabase.from('assets').delete().eq('content_id', id);
     for (const a of data.assets) {
-      await supabase.from('assets').insert({ content_id: id, url: a.url, mime: a.mime || null, width: a.width || null, height: a.height || null, duration: a.duration || null });
+      await supabase.from('assets').insert({ 
+        content_id: id, 
+        url: a.url, 
+        mime: a.mime || null, 
+        width: a.width || null, 
+        height: a.height || null, 
+        duration: a.duration || null,
+        size_bytes: a.size_bytes || null,    // ✅ ДОДАНО
+        poster_url: a.poster_url || null,    // ✅ ДОДАНО
+        ord: a.ord || 0                      // ✅ ДОДАНО
+      });
     }
   }
   return getContentById(id);
@@ -157,12 +293,20 @@ export async function getSummaryCounts({ sessionId, userId = null }) {
 }
 
 async function hydrateContent(row) {
-  const assets = (await supabase.from('assets').select('*').eq('content_id', row.id)).data || [];
+  const assets = (await supabase.from('assets').select('*').eq('content_id', row.id).order('ord', { ascending: true })).data || [];
   return {
     id: row.id,
     type: row.type,
     title: row.title,
     description: row.description,
+    text_body: row.text_body,
+    prompt: row.prompt ?? (row.metadata ? row.metadata.prompt : undefined),
+    model: row.model ?? (row.metadata ? row.metadata.model : undefined),
+    original_prompt: row.original_prompt ?? null,
+    enhanced_prompt: row.enhanced_prompt ?? null,
+    agent_id: row.agent_id ?? null,
+    batch_id: row.batch_id,              // ✅ ДОДАНО
+    generation_params: row.generation_params || {},  // ✅ ДОДАНО
     metadata: row.metadata || {},
     score_mean: row.score_mean,
     score_count: row.score_count,
@@ -171,5 +315,3 @@ async function hydrateContent(row) {
     url: assets?.[0]?.url,
   };
 }
-
-

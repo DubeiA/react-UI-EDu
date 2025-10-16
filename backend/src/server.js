@@ -7,6 +7,13 @@ import pino from 'pino';
 import { initDb, touchSession, listContent, createContent, deleteContent, updateContent, getNextContent, recordRating, getStats, getContentById, getSummaryCounts, findUserByUsername, countContent } from './db.js';
 import Replicate from 'replicate';
 import { initQueues, enqueueGenerate, getJobStatus } from './queue.js';
+import { supabase } from './db_supabase.js';
+import { 
+  getAllActiveAgents, 
+  enhancePrompt, 
+  analyzeRatingFeedback,
+  generateMultipleVariants 
+} from './services/agent_service.js';
 
 const app = express();
 const logger = pino({ level: process.env.NODE_ENV === 'production' ? 'info' : 'debug' });
@@ -26,6 +33,12 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 // Models configuration for frontend selection (no secrets exposed)
 const MODELS_CONFIG = {
   image: {
+    'seedream-4': {
+      name: 'Seedream 4',
+      price: '$0.03',
+      speed: 'Середньо (~1 хв)',
+      replicateId: 'bytedance/seedream-4',
+    },
     'flux-schnell': {
       name: 'FLUX Schnell',
       price: '$0.003',
@@ -198,14 +211,21 @@ app.delete('/api/admin/data/:id', authMiddleware, requireRole('admin'), async (r
 
 // Ratings
 app.post('/api/rate', rateLimitRatings, async (req, res) => {
-  const { content_id, direction, comment = '', session_id } = req.body || {};
-  if (!content_id || !direction) return res.status(400).json({ error: 'Missing content_id or direction' });
-  if (session_id) await touchSession(session_id);
-  const rating = parseInt(direction, 10);
-  if (![-2, -1, 1, 2].includes(rating)) return res.status(400).json({ error: 'Invalid rating' });
-  const userId = req.user?.id || null; // if rated while authenticated
-  await recordRating({ contentId: content_id, rating, userId, sessionId: session_id, comment });
-  res.json({ ok: true });
+  try {
+    const { content_id, direction, comment = '', session_id } = req.body || {};
+    if (!content_id || !direction) return res.status(400).json({ error: 'Missing content_id or direction' });
+    if (session_id) await touchSession(session_id);
+    const rating = parseInt(direction, 10);
+    if (![-2, -1, 1, 2].includes(rating)) return res.status(400).json({ error: 'Invalid rating' });
+    const userId = req.user?.id || null; // if rated while authenticated
+    await recordRating({ contentId: content_id, rating, userId, sessionId: session_id, comment });
+    // Fire-and-forget: analyze feedback for agent learning
+    analyzeRatingFeedback(content_id, rating, userId).catch((e) => console.error('Feedback analysis failed', e));
+    res.json({ ok: true, analyzed: true });
+  } catch (e) {
+    console.error('Error recording rating:', e);
+    res.status(500).json({ error: e?.message || 'failed' });
+  }
 });
 
 // Stats
@@ -230,12 +250,103 @@ app.get('/api/stats/summary', async (req, res) => {
 // Generate async (queue-backed with in-memory fallback) — feature-flagged
 app.post('/api/generate', async (req, res) => {
   if (!ENABLE_EMBEDDED_GENERATE) return res.status(503).json({ error: 'Embedded generation disabled' });
-  const { prompt, count = 10, model = null, type = 'image', duration_seconds = null, replicate_token = '' } = req.body || {};
-  if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
-  const token = (replicate_token || req.headers['x-replicate-token'] || process.env.REPLICATE_API_TOKEN || '').toString();
-  if (!token) return res.status(400).json({ error: 'Missing Replicate token' });
-  const job = await enqueueGenerate({ prompt, count, model, token, type, duration_seconds });
-  res.json({ ok: true, jobId: job.id });
+  try {
+    const { 
+      prompt, 
+      count = 10, 
+      model = null, 
+      type = 'image', 
+      duration_seconds = null, 
+      replicate_token = '',
+      agent_id = null,
+      use_agent = true,
+      ...rest
+    } = req.body || {};
+    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+    const token = (replicate_token || req.headers['x-replicate-token'] || process.env.REPLICATE_API_TOKEN || '').toString();
+    if (!token) return res.status(400).json({ error: 'Missing Replicate token' });
+    const job = await enqueueGenerate({ prompt, count, model, token, type, duration_seconds, agent_id, use_agent, ...rest });
+    res.json({ ok: true, jobId: job.id, agentEnhanced: !!use_agent });
+  } catch (e) {
+    console.error('Error starting generation:', e);
+    res.status(500).json({ error: e?.message || 'failed' });
+  }
+});
+
+// ========================================
+// AGENTS ENDPOINTS
+// ========================================
+
+app.get('/api/agents', async (req, res) => {
+  try {
+    const agents = await getAllActiveAgents();
+    res.json({ agents });
+  } catch (error) {
+    console.error('Error fetching agents:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/agents/enhance', async (req, res) => {
+  try {
+    const { prompt, type, agent_id } = req.body || {};
+    if (!prompt || !type) return res.status(400).json({ error: 'prompt and type are required' });
+    const result = await enhancePrompt(prompt, type, agent_id);
+    res.json({
+      original_prompt: prompt,
+      enhanced_prompt: result.enhanced_prompt,
+      agent_id: result.agent_id,
+      agent_name: result.agent_name,
+      techniques_used: result.techniques_used
+    });
+  } catch (error) {
+    console.error('Error enhancing prompt:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/agents/variants', async (req, res) => {
+  try {
+    const { prompt, type, count = 5 } = req.body || {};
+    if (!prompt || !type) return res.status(400).json({ error: 'prompt and type are required' });
+    console.log(`🎲 Generating ${count} variants for: "${prompt}"`);
+    const variants = await generateMultipleVariants(prompt, type, count);
+    res.json({ original_prompt: prompt, variants, count: variants.length });
+  } catch (error) {
+    console.error('Error generating variants:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/agents/:id/insights', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase.rpc('get_agent_insights', { p_agent_id: id });
+    if (error) throw error;
+    res.json({ insights: data?.[0] || null });
+  } catch (error) {
+    console.error('Error fetching agent insights:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/agents/:id/memories', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pageLimit = parseInt(String(req.query.limit || '20'), 10);
+    const pageOffset = parseInt(String(req.query.offset || '0'), 10);
+    const { data, error } = await supabase
+      .from('agent_memories')
+      .select('*')
+      .eq('agent_id', id)
+      .order('created_at', { ascending: false })
+      .range(pageOffset, pageOffset + pageLimit - 1);
+    if (error) throw error;
+    res.json({ memories: data || [] });
+  } catch (error) {
+    console.error('Error fetching agent memories:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Public job status

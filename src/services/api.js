@@ -138,7 +138,16 @@ class ApiService {
     const count = params.count || 10;
     return this.request('/generate', {
       method: 'POST',
-      body: JSON.stringify({ prompt, count, model, type: params.type || 'image', duration_seconds: params.seconds, replicate_token: params.replicateToken || '' }),
+      body: JSON.stringify({ 
+        prompt, 
+        count, 
+        model, 
+        type: params.type || 'image', 
+        duration_seconds: params.seconds, 
+        replicate_token: params.replicateToken || '',
+        agent_id: params.agent_id || null,
+        use_agent: params.use_agent !== false, // default true
+      }),
     });
   }
 
